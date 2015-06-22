@@ -24,12 +24,12 @@ func RunGC(docker *dockerclient.DockerClient, filters ...string) error {
 	return nil
 }
 
-func runGC(dockerClient *dockerclient.DockerClient, filters ...string) (bool, error) {
-	done := true
+func ListGCImageIds(dockerClient *dockerclient.DockerClient, filters ...string) ([]string, error) {
+	gsIds := []string{}
 
 	images, err := dockerClient.ListImages(true)
 	if err != nil {
-		return true, err
+		return gsIds, err
 	}
 
 	imagesToSave := make(map[string]bool)
@@ -54,7 +54,7 @@ func runGC(dockerClient *dockerclient.DockerClient, filters ...string) (bool, er
 
 	containers, err := dockerClient.ListContainers(true, false, "")
 	if err != nil {
-		return true, err
+		return gsIds, err
 	}
 
 	for _, c := range containers {
@@ -65,12 +65,28 @@ func runGC(dockerClient *dockerclient.DockerClient, filters ...string) (bool, er
 
 	for _, image := range images {
 		if !imagesToSave[image.Id] {
-			log.Printf("Deleting image with image id %s %v\n", image.Id, image.RepoTags)
-			done = false
-			_, err = dockerClient.RemoveImage(image.Id)
-			if err != nil {
-				log.Println("Failed to delete image: ", err)
-			}
+			log.Printf("Delete (considered) image with image id %s %v\n", image.Id, image.RepoTags)
+			gsIds = append(gsIds, image.Id)
+		}
+	}
+
+	return gsIds, nil
+}
+
+func runGC(dockerClient *dockerclient.DockerClient, filters ...string) (bool, error) {
+	done := true
+
+	gcList, err := ListGCImageIds(dockerClient, filters...)
+	if err != nil {
+		return true, err
+	}
+
+	for _, id := range gcList {
+		log.Printf("Deleting image with image id %s\n", id)
+		done = false
+		_, err = dockerClient.RemoveImage(id)
+		if err != nil {
+			log.Println("Failed to delete image: ", err)
 		}
 	}
 
